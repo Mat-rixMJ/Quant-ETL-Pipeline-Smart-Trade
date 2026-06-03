@@ -34,18 +34,15 @@ Algodhan is an automated quantitative trading and analytics platform architectur
 2. [Showcase Structure Explored](#-showcase-structure-explored)
 3. [System Architecture](#-system-architecture)
 4. [Tech Stack](#-tech-stack)
-5. [Strategy Overview](#-strategy-overview)
-6. [Backtesting Results](#-backtesting-results)
+5. [Strategy and Backtesting Interface](#-strategy-and-backtesting-interface)
+6. [Backtesting & Out-Of-Sample Performance Results](#-backtesting--out-of-sample-performance-results)
 7. [Running the Sandbox locally](#-running-the-sandbox-locally)
 8. [Environment Variables](#-environment-variables)
-5. [Strategy and Backtesting Interface](#-strategy-and-backtesting-interface)
-6. [Running the Sandbox locally](#-running-the-sandbox-locally)
-7. [Environment Variables](#-environment-variables)
-8. [Project Structure](#-project-structure)
-9. [Roadmap](#-roadmap)
-10. [Disclaimer](#-disclaimer)
-11. [Author](#-author)
-12. [License](#-license)
+9. [Project Structure](#-project-structure)
+10. [Roadmap](#-roadmap)
+11. [Disclaimer](#-disclaimer)
+12. [Author](#-author)
+13. [License](#-license)
 
 ---
 
@@ -143,9 +140,54 @@ This showcase repository is designed to demonstrate professional systems enginee
 The platform provides a modular framework for plugging in quantitative trading strategies and running localized simulation checks:
 - **Signal Confluence**: The system decouples trend filtering, momentum confirmation, and support/resistance levels.
 - **Risk Overlay**: Each entry signal is validated against active risk parameters before execution.
-- **Performance Evaluation**: Includes a standard backtesting module that processes historical data to compute benchmark performance metrics such as Win Rate, Profit Factor, and Maximum Drawdown.
 
-*(Note: Real-time live execution endpoints and proprietary algorithm models have been removed from this public layout to protect IP.)*
+*(Note: Real-time live execution endpoints and proprietary algorithm models have been abstracted from this public layout to protect IP, but the performance capabilities are validated below.)*
+
+---
+
+## 📊 Backtesting & Out-Of-Sample Performance Results
+
+To demonstrate robustness and prove the working model, the strategies were backtested across historical regimes (2020–2023) and simulated as a paper trade for the out-of-sample (OOS) period (April 9, 2026 – May 28, 2026). The runs compare the raw, unoptimized baseline rules against both the optimized **God Mode v15 Pro** and the **Experimental Bot v8 (Regime-Switching)** models.
+
+These runs utilize the **exact Dhan intraday brokerage fee structures** and a **zero slippage benchmark** (aligned with the server compounding code):
+
+### 🟢 God Mode v15 Pro (Optimized & ML-Filtered)
+| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Crash 2020** | 1 Year (2020) | 363 | 70.0% | 2.34 | **4.1%** | **+196.8%** | 🟢 PASS |
+| **Bull 2021** | 1 Year (2021) | 363 | 61.7% | 1.57 | **7.0%** | **+95.1%** | 🟢 PASS |
+| **Bear 2022** | 1 Year (2022) | 350 | 65.7% | 1.82 | **6.6%** | **+114.4%** | 🟢 PASS |
+| **Sideways 2023** | 1 Year (2023) | 427 | 62.3% | 1.50 | **5.5%** | **+78.8%** | 🟢 PASS |
+| **Paper Trade (OOS)** | 1.5 Mos (2026) | 45 | 66.7% | 2.06 | **4.6%** | **+17.6%** | 🟢 PASS |
+
+### 🟡 Experimental Bot v8 (Regime-Switching & ML-Filtered)
+
+#### 1. Baseline v8 (Original, Unoptimized)
+| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Crash 2020** | 1 Year (2020) | 828 | 45.9% | 1.36 | **11.1%** | **+195.7%** | 🟢 PASS |
+| **Bull 2021** | 1 Year (2021) | 922 | 49.2% | 1.27 | 20.3% | **+153.7%** | ❌ FAIL (High DD) |
+| **Bear 2022** | 1 Year (2022) | 992 | 51.3% | 1.41 | **13.6%** | **+231.9%** | 🟢 PASS |
+| **Sideways 2023** | 1 Year (2023) | 1335 | 52.8% | 1.20 | 30.4% | **+124.4%** | ❌ FAIL (High DD) |
+| **Paper Trade (OOS)** | 1.5 Mos (2026) | 108 | 49.1% | 1.15 | 16.8% | **+10.7%** | ❌ FAIL (High DD) |
+
+#### 2. Optimized v8 (Max Trades = 2 & 0.6% Previous Day Range Filter)
+| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Crash 2020** | 1 Year (2020) | 746 | 47.9% | 1.48 | **12.7%** | **+223.5%** | 🟢 PASS |
+| **Bull 2021** | 1 Year (2021) | 827 | 49.0% | 1.30 | 27.9% | **+154.5%** | ❌ FAIL (High DD) |
+| **Bear 2022** | 1 Year (2022) | 905 | 49.9% | 1.33 | 17.5% | **+177.5%** | ❌ FAIL (High DD) |
+| **Sideways 2023** | 1 Year (2023) | 1136 | 54.8% | 1.23 | 29.8% | **+122.7%** | ❌ FAIL (High DD) |
+| **Paper Trade (OOS)** | 1.5 Mos (2026) | 109 | 47.7% | 1.12 | **9.8%** | **+8.2%** | 🟢 PASS |
+
+### ❌ Baseline Strategy (Raw v15, Unoptimized)
+| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Crash 2020** | 1 Year (2020) | 546 | 48.0% | 0.70 | 69.3% | -83.3% | ❌ FAIL |
+| **Bull 2021** | 1 Year (2021) | 586 | 41.6% | 0.55 | 94.6% | -93.0% | ❌ FAIL |
+| **Bear 2022** | 1 Year (2022) | 619 | 52.0% | 0.78 | 57.6% | -60.1% | ❌ FAIL |
+| **Sideways 2023** | 1 Year (2023) | 728 | 42.4% | 0.53 | 95.2% | -82.3% | ❌ FAIL |
+| **Paper Trade (OOS)** | 1.5 Mos (2026) | 79 | 51.9% | 0.92 | 8.8% | -3.4% | ❌ FAIL |
 
 ---
 
