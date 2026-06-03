@@ -38,33 +38,36 @@ Algodhan is an automated quantitative trading and analytics platform architectur
 6. [Backtesting Results](#-backtesting-results)
 7. [Running the Sandbox locally](#-running-the-sandbox-locally)
 8. [Environment Variables](#-environment-variables)
-9. [Project Structure](#-project-structure)
-10. [Roadmap](#-roadmap)
-11. [Disclaimer](#-disclaimer)
-12. [Author](#-author)
-13. [License](#-license)
+5. [Strategy and Backtesting Interface](#-strategy-and-backtesting-interface)
+6. [Running the Sandbox locally](#-running-the-sandbox-locally)
+7. [Environment Variables](#-environment-variables)
+8. [Project Structure](#-project-structure)
+9. [Roadmap](#-roadmap)
+10. [Disclaimer](#-disclaimer)
+11. [Author](#-author)
+12. [License](#-license)
 
 ---
 
 ## ⚡ Key Features
 
-- 📡 **Real-Time Data Ingestion Flow**: Asynchronous multi-instrument tick data handler design using WebSockets (abstracted client wrapper in `core/ws_manager.py`).
-- 🧠 **Regime Classification Mechanics**: Evaluates volatility, ADX, and Choppiness index trends to calibrate target rewards or sit out of choppy sideways markets.
-- 📈 **Modular Data Pipeline**: Decoupled structures computing EMA, RSI, ADX, ATR, VWAP, and daily Pivot Points using Pandas, NumPy, and pandas-ta.
-- 🛡️ **Intraday Strategy Template**: Clean layout illustrating a multi-timeframe pullback scalping system, featuring resampled timeframes and confluence checks.
-- 💼 **Position Sizing and Risk Sizing**: Structural models illustrating 1.5% capital-at-risk position adjustments, trailing stops, and break-even rules.
-- 🗄️ **High-Concurrency SQLite Integration**: SQLite database connection settings utilizing WAL mode and `synchronous=NORMAL` to showcase high-throughput read/write concurrency.
-- 📊 **Streamlit Visual Dashboard**: A read-only presentation-grade performance visualizer utilizing Plotly charts, heatmaps, and Sharpe/drawdown metric indicators.
+- 📡 **High-Throughput Ingestion Engine**: Asynchronous, multi-instrument real-time market data stream handler utilizing WebSockets with automated reconnection logic (see `core/ws_manager.py`).
+- 📊 **Decoupled Quantitative ETL Pipeline**: Modular data processing layer that computes technical indicators (EMA, RSI, ADX, ATR, VWAP) using vector operations in Pandas and NumPy.
+- ⚙️ **Dynamic Market Regime Classification**: State-machine architecture designed to categorize volatility regimes (e.g., high vs. low volatility, trending vs. mean-reverting) to adjust system operational states.
+- 🛡️ **Modular Strategy Interface**: Clean, template-driven layout (`strategy/strategy_template.py`) demonstrating a decoupled execution model for technical signals.
+- 💼 **Architectural Risk Control Interface**: Abstract models illustrating capital-at-risk scaling, volatility-based sizing, and customizable stop-loss/take-profit rules.
+- 🗄️ **High-Concurrency Persistence**: Optimized SQLite database connection settings utilizing Write-Ahead Logging (WAL) and `PRAGMA synchronous=NORMAL` to handle simultaneous read/write actions from parallel threads.
+- 🖥️ **Analytical Dashboard**: Presentation-grade interactive Streamlit UI utilizing Plotly charts, heatmaps, and aggregate risk metric tracking.
 
 ---
 
 ## 🔍 Showcase Structure Explored
 
-You are welcome to explore the systems engineering, ETL pipelines, and architecture patterns:
-- **Data Ingestion**: Check out [core/ws_manager.py](core/ws_manager.py) to view how asynchronous WebSocket ticks are handled.
-- **Risk Engine**: Review [core/risk_manager.py](core/risk_manager.py) to inspect how capital metrics, position sizes, and SQLite WAL settings are configured.
-- **UI & Analytics**: Review [dashboard/public_dashboard.py](dashboard/public_dashboard.py) to inspect the premium presentation-grade UI.
-- **Deployment Templates**: Review the [docs/](docs/) folder for samples of systemd service daemons and Nginx reverse proxy configurations.
+This showcase repository is designed to demonstrate professional systems engineering and clean architectural patterns:
+- **Asynchronous I/O**: Inspect [core/ws_manager.py](core/ws_manager.py) to see how streaming WebSocket ticks are processed concurrently.
+- **Data Pipeline**: Review [core/regime_detector.py](core/regime_detector.py) to see clean segregation of mathematical transformations.
+- **Risk Layer Architecture**: Check out [core/risk_manager.py](core/risk_manager.py) for database logging, connection pooling, and safety validation boundaries.
+- **Daemonization & Deployment**: See [docs/](docs/) for systemd services and Nginx configuration templates.
 
 ---
 
@@ -73,7 +76,7 @@ You are welcome to explore the systems engineering, ETL pipelines, and architect
 ```text
                   +-------------------------------------------------+
                   |                INGESTION LAYER                  |
-                  |  [WebSockets Manager]      [YFinance API]       |
+                  |  [WebSockets Manager]      [Data Provider API]  |
                   |   (Real-time LTP ticks)   (Historical Bars)     |
                   +-----------+-----------------------+-------------+
                               |                       |
@@ -86,14 +89,14 @@ You are welcome to explore the systems engineering, ETL pipelines, and architect
                   |     |                                   |       |
                   |     v                                   v       |
                   |  [Regime Detector]             [Signal Generator]|
-                  |  (Gap & Volatility analysis)   (EMA, RSI, MACD,  |
-                  |  (Trending vs. Choppy index)    VWAP, Pivots)   |
+                  |  (Gap & Volatility analysis)   (Technical Conflu- |
+                  |  (Market State Classifier)      ence Pipelines)  |
                   |     |                                   |       |
                   |     +-----------------+-----------------+       |
                   |                       |                         |
                   |                       v                         |
                   |                [Risk Manager]                   |
-                  |           (1.5% Sizing, Trailing SL)            |
+                  |           (Capital Protection Boundary)         |
                   +-----------------------+-------------------------+
                                           |
                                           v
@@ -124,70 +127,25 @@ You are welcome to explore the systems engineering, ETL pipelines, and architect
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
 | **Language** | Python 3.10+ | Core application logic and execution engine |
-| **Data Ingestion** | Fyers WebSocket API / yfinance | Real-time LTP tick stream ingestion and fallback historical data fetching |
+| **Data Ingestion** | WebSocket API Client / yfinance | Real-time LTP tick stream ingestion and historical data fetching |
 | **Data Processing** | Pandas, NumPy, pandas-ta | Vectorized technical indicators, resampling, and regime analysis |
 | **Database** | SQLite (WAL Mode) | High-concurrency trade ledger logging and state persistence |
 | **Dashboard** | Streamlit, Plotly | Live admin control panel and read-only interactive analytics dashboard |
-| **Deployment** | AWS EC2 (Ubuntu 22.04 LTS) | 24/7 cloud hosting with low-latency network connectivity |
+| **Deployment** | Cloud VM (Ubuntu 22.04 LTS) | 24/7 cloud hosting with low-latency network connectivity |
 | **Process Control**| Systemd | Deploys execution loops and dashboards as background service daemons |
 | **Security/Web** | Nginx | Reverse proxy for Streamlit dashboards, SSL, and network isolation |
-| **Notifications** | Telegram Bot API, SMTP | Live crash warnings, trade executions, and end-of-day reports |
+| **Notifications** | Telegram Bot API, SMTP | Live crash warnings, system heartbeats, and daily reports |
 
 ---
 
-## 📈 Strategy Overview
+## 📈 Strategy and Backtesting Interface
 
-The conceptual strategy template (**VWAP Pullback Scalper**) is built around a confluence of multiple technical criteria:
-- **Trend Filters**: Verification of price position relative to shorter-term EMAs and anchored Session VWAP.
-- **Regime Classification**: Exiting entries or switching criteria dynamically based on the Choppiness Index value.
-- **Volume & Momentum confluences**: Volume filters combined with MACD acceleration curves.
-- **Support & Resistance**: Pivot point (Daily P, S1, R1) checks.
+The platform provides a modular framework for plugging in quantitative trading strategies and running localized simulation checks:
+- **Signal Confluence**: The system decouples trend filtering, momentum confirmation, and support/resistance levels.
+- **Risk Overlay**: Each entry signal is validated against active risk parameters before execution.
+- **Performance Evaluation**: Includes a standard backtesting module that processes historical data to compute benchmark performance metrics such as Win Rate, Profit Factor, and Maximum Drawdown.
 
----
-
-## 📊 Backtesting & Out-Of-Sample Performance Results
-
-To demonstrate robustness and prove the working model, the strategies were backtested across historical regimes (2020–2023) and simulated as a paper trade for the out-of-sample (OOS) period (April 9, 2026 – May 28, 2026). The runs compare the raw, unoptimized baseline rules against both the optimized **God Mode v15 Pro** and the **Experimental Bot v8 (Regime-Switching)** models.
-
-These runs utilize the **exact Dhan intraday brokerage fee structures** and a **zero slippage benchmark** (aligned with the server compounding code):
-
-### 🟢 God Mode v15 Pro (Optimized & ML-Filtered)
-| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Crash 2020** | 1 Year (2020) | 363 | 70.0% | 2.34 | **4.1%** | **+196.8%** | 🟢 PASS |
-| **Bull 2021** | 1 Year (2021) | 363 | 61.7% | 1.57 | **7.0%** | **+95.1%** | 🟢 PASS |
-| **Bear 2022** | 1 Year (2022) | 350 | 65.7% | 1.82 | **6.6%** | **+114.4%** | 🟢 PASS |
-| **Sideways 2023** | 1 Year (2023) | 427 | 62.3% | 1.50 | **5.5%** | **+78.8%** | 🟢 PASS |
-| **Paper Trade (OOS)** | 1.5 Mos (2026) | 45 | 66.7% | 2.06 | **4.6%** | **+17.6%** | 🟢 PASS |
-
-### 🟡 Experimental Bot v8 (Regime-Switching & ML-Filtered)
-
-#### 1. Baseline v8 (Original, Unoptimized)
-| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Crash 2020** | 1 Year (2020) | 828 | 45.9% | 1.36 | **11.1%** | **+195.7%** | 🟢 PASS |
-| **Bull 2021** | 1 Year (2021) | 922 | 49.2% | 1.27 | 20.3% | **+153.7%** | ❌ FAIL (High DD) |
-| **Bear 2022** | 1 Year (2022) | 992 | 51.3% | 1.41 | **13.6%** | **+231.9%** | 🟢 PASS |
-| **Sideways 2023** | 1 Year (2023) | 1335 | 52.8% | 1.20 | 30.4% | **+124.4%** | ❌ FAIL (High DD) |
-| **Paper Trade (OOS)** | 1.5 Mos (2026) | 108 | 49.1% | 1.15 | 16.8% | **+10.7%** | ❌ FAIL (High DD) |
-
-#### 2. Optimized v8 (Max Trades = 2 & 0.6% Previous Day Range Filter)
-| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Crash 2020** | 1 Year (2020) | 746 | 47.9% | 1.48 | **12.7%** | **+223.5%** | 🟢 PASS |
-| **Bull 2021** | 1 Year (2021) | 827 | 49.0% | 1.30 | 27.9% | **+154.5%** | ❌ FAIL (High DD) |
-| **Bear 2022** | 1 Year (2022) | 905 | 49.9% | 1.33 | 17.5% | **+177.5%** | ❌ FAIL (High DD) |
-| **Sideways 2023** | 1 Year (2023) | 1136 | 54.8% | 1.23 | 29.8% | **+122.7%** | ❌ FAIL (High DD) |
-| **Paper Trade (OOS)** | 1.5 Mos (2026) | 109 | 47.7% | 1.12 | **9.8%** | **+8.2%** | 🟢 PASS |
-
-### ❌ Baseline Strategy (Raw v15, Unoptimized)
-| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Crash 2020** | 1 Year (2020) | 546 | 48.0% | 0.70 | 69.3% | -83.3% | ❌ FAIL |
-| **Bull 2021** | 1 Year (2021) | 586 | 41.6% | 0.55 | 94.6% | -93.0% | ❌ FAIL |
-| **Bear 2022** | 1 Year (2022) | 619 | 52.0% | 0.78 | 57.6% | -60.1% | ❌ FAIL |
-| **Sideways 2023** | 1 Year (2023) | 728 | 42.4% | 0.53 | 95.2% | -82.3% | ❌ FAIL |
-| **Paper Trade (OOS)** | 1.5 Mos (2026) | 79 | 51.9% | 0.92 | 8.8% | -3.4% | ❌ FAIL |
+*(Note: Real-time live execution endpoints and proprietary algorithm models have been removed from this public layout to protect IP.)*
 
 ---
 
