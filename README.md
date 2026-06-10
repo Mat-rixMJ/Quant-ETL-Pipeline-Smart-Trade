@@ -1,296 +1,667 @@
-# Quant ETL Pipeline (Smart-Trade Showcase)
+# Algodhan — Multi-Strategy Algorithmic Trading Platform
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Mat-rixMJ/Smart-Trade/main/dashboard_preview.png" alt="Algodhan Platform Dashboard Mockup" width="800" style="border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px rgba(0,0,0,0.5);"/>
-</p>
+> Production-grade intraday trading system running 3 independent strategy bots on Indian equities (NSE). Built on Fyers API with real-time WebSocket data, per-strategy stock selection, and full trade lifecycle management.
 
-<p align="center">
-  <a href="http://15.134.152.37/viewer"><img src="https://img.shields.io/badge/Live_Demo-smtrade.space-6366F1?style=for-the-badge&logo=streamlit" alt="Live Demo"/></a>
-  <a href="https://www.python.org"><img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python" alt="Python Version"/></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/></a>
-  <a href="https://github.com/Mat-rixMJ/Smart-Trade/stargazers"><img src="https://img.shields.io/github/stars/Mat-rixMJ/Smart-Trade?style=for-the-badge" alt="GitHub Stars"/></a>
-  <a href="https://github.com/Mat-rixMJ/Smart-Trade/commits/main"><img src="https://img.shields.io/github/last-commit/Mat-rixMJ/Smart-Trade?style=for-the-badge" alt="Last Commit"/></a>
-</p>
+**Live Instance**: smtrade.space | **Infra**: Oracle Cloud ARM (4 OCPU, 24GB) | **Market**: NSE (India) | **Timeframe**: 5-minute
 
 ---
 
-> [!IMPORTANT]  
-> **Repository Notice (Showcase Version)**  
-> This is a sanitized, public-facing structural showcase repository. To protect proprietary trading edges, live API keys, and production databases, the core predictive logic and live broker execution components have been abstracted into design templates. The complete, fully operational trading system resides in a private repository.
+## Table of Contents
 
-### Tagline
-Production-grade algorithmic trading platform architecture and modular ETL analytics pipeline executing high-probability breakout strategies on NSE equities.
-
-### Description
-Algodhan is an automated quantitative trading and analytics platform architecture built in Python, integrating the Fyers API (WebSocket & Order management), SQLite in Write-Ahead Logging (WAL) mode, and Streamlit dashboard visualizers. The platform architecture showcases ingestion of real-time market data, dynamic market regime classification (trending vs. choppy), and compute-intensive technical indicator pipelines. The project exhibits robust systems engineering, clean ETL separation, multi-process daemon configuration, and automated crash-recovery triggers.
-
-### Deployed Live Viewer
-👉 **[http://smtrade.space](http://15.134.152.37/viewer/)** *(Interactive Presentation-Grade Performance Dashboard)*
-
----
-
-## 📑 Table of Contents
-1. [Key Features](#-key-features)
-2. [Showcase Structure Explored](#-showcase-structure-explored)
-3. [System Architecture](#-system-architecture)
-4. [Tech Stack](#-tech-stack)
-5. [Strategy and Backtesting Interface](#-strategy-and-backtesting-interface)
-6. [Backtesting & Out-Of-Sample Performance Results](#-backtesting--out-of-sample-performance-results)
-7. [Running the Sandbox locally](#-running-the-sandbox-locally)
-8. [Environment Variables](#-environment-variables)
-9. [Project Structure](#-project-structure)
-10. [Roadmap](#-roadmap)
-11. [Disclaimer](#-disclaimer)
-12. [Author](#-author)
-13. [License](#-license)
+1. [System Architecture](#1-system-architecture)
+2. [Data Flow](#2-data-flow)
+3. [Trading Strategies](#3-trading-strategies)
+4. [Stock Selection Engine](#4-stock-selection-engine)
+5. [Trade Lifecycle](#5-trade-lifecycle)
+6. [Risk Management](#6-risk-management)
+7. [Infrastructure & Deployment](#7-infrastructure--deployment)
+8. [API & Frontend](#8-api--frontend)
+9. [Configuration Reference](#9-configuration-reference)
+10. [Operations & Monitoring](#10-operations--monitoring)
+11. [Security Model](#11-security-model)
+12. [Scaling Considerations](#12-scaling-considerations)
 
 ---
 
-## ⚡ Key Features
+## 1. System Architecture
 
-- 📡 **High-Throughput Ingestion Engine**: Asynchronous, multi-instrument real-time market data stream handler utilizing WebSockets with automated reconnection logic (see `core/ws_manager.py`).
-- 📊 **Decoupled Quantitative ETL Pipeline**: Modular data processing layer that computes technical indicators (EMA, RSI, ADX, ATR, VWAP) using vector operations in Pandas and NumPy.
-- ⚙️ **Dynamic Market Regime Classification**: State-machine architecture designed to categorize volatility regimes (e.g., high vs. low volatility, trending vs. mean-reverting) to adjust system operational states.
-- 🛡️ **Modular Strategy Interface**: Clean, template-driven layout (`strategy/strategy_template.py`) demonstrating a decoupled execution model for technical signals.
-- 💼 **Architectural Risk Control Interface**: Abstract models illustrating capital-at-risk scaling, volatility-based sizing, and customizable stop-loss/take-profit rules.
-- 🗄️ **High-Concurrency Persistence**: Optimized SQLite database connection settings utilizing Write-Ahead Logging (WAL) and `PRAGMA synchronous=NORMAL` to handle simultaneous read/write actions from parallel threads.
-- 🖥️ **Analytical Dashboard**: Presentation-grade interactive Streamlit UI utilizing Plotly charts, heatmaps, and aggregate risk metric tracking.
+### High-Level Overview
 
----
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         OCI SERVER (smtrade-arm-prod)                         │
+│                   Ubuntu 22.04 ARM | 4 OCPU | 24 GB RAM                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                    TRADING ENGINE LAYER                               │   │
+│  │                                                                       │   │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                  │   │
+│  │  │  SCALPER BOT │  │   PRO BOT   │  │   V8 BOT    │                  │   │
+│  │  │ main_scalper │  │  main_pro   │  │  main_v8    │                  │   │
+│  │  │   .py        │  │   .py       │  │   .py       │                  │   │
+│  │  │              │  │             │  │             │                  │   │
+│  │  │ strategy_    │  │ strategy_   │  │ strategy_   │                  │   │
+│  │  │ scalper_v1   │  │ pro         │  │ v8_fixed    │                  │   │
+│  │  │              │  │             │  │             │                  │   │
+│  │  │ ScalperSel.  │  │ ProSelector │  │ V8Selector  │                  │   │
+│  │  │              │  │             │  │             │                  │   │
+│  │  │ scalper_     │  │ pro_        │  │ v8_         │                  │   │
+│  │  │ trades.db    │  │ trades.db   │  │ trades.db   │                  │   │
+│  │  └──────┬───────┘  └──────┬──────┘  └──────┬──────┘                  │   │
+│  │         │                  │                 │                         │   │
+│  │         └──────────────────┼─────────────────┘                        │   │
+│  │                            │                                           │   │
+│  │  ┌─────────────────────────▼─────────────────────────────────────┐    │   │
+│  │  │                    SHARED SERVICES                              │    │   │
+│  │  │                                                                │    │   │
+│  │  │  ┌──────────┐  ┌────────────┐  ┌───────────┐  ┌───────────┐  │    │   │
+│  │  │  │ Fyers WS │  │ broker.py  │  │ notifier  │  │ state_mgr │  │    │   │
+│  │  │  │ (ticks)  │  │ (REST API) │  │ (Telegram)│  │ (LTP/Reg) │  │    │   │
+│  │  │  └──────────┘  └────────────┘  └───────────┘  └───────────┘  │    │   │
+│  │  │                                                                │    │   │
+│  │  │  ┌────────────────┐  ┌──────────────────┐                     │    │   │
+│  │  │  │ stock_selector │  │ risk_manager.py  │                     │    │   │
+│  │  │  │ (Fyers-based)  │  │ (position sizing)│                     │    │   │
+│  │  │  └────────────────┘  └──────────────────┘                     │    │   │
+│  │  └────────────────────────────────────────────────────────────────┘    │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                        WEB LAYER                                      │   │
+│  │                                                                       │   │
+│  │  Nginx (SSL/TLS) → FastAPI (:8000) → Next.js (:3000)                │   │
+│  │                  → Streamlit (:8501, :8503)                          │   │
+│  │                  → Admin API (:8001, VPN only)                       │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  SUPPORT SERVICES                                                    │   │
+│  │  telegram_listener | copy_trader | bot_monitor (watchdog)            │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-## 🔍 Showcase Structure Explored
+### Network Diagram
 
-This showcase repository is designed to demonstrate professional systems engineering and clean architectural patterns:
-- **Asynchronous I/O**: Inspect [core/ws_manager.py](core/ws_manager.py) to see how streaming WebSocket ticks are processed concurrently.
-- **Data Pipeline**: Review [core/regime_detector.py](core/regime_detector.py) to see clean segregation of mathematical transformations.
-- **Risk Layer Architecture**: Check out [core/risk_manager.py](core/risk_manager.py) for database logging, connection pooling, and safety validation boundaries.
-- **Daemonization & Deployment**: See [docs/](docs/) for systemd services and Nginx configuration templates.
-
----
-
-## 🏗️ System Architecture
-
-```text
-                  +-------------------------------------------------+
-                  |                INGESTION LAYER                  |
-                  |  [WebSockets Manager]      [Data Provider API]  |
-                  |   (Real-time LTP ticks)   (Historical Bars)     |
-                  +-----------+-----------------------+-------------+
-                              |                       |
-                              v                       v
-                  +-------------------------------------------------+
-                  |                 ANALYTICAL CORE                 |
-                  |                [Execution Engine]               |
-                  |                       |                         |
-                  |     +-----------------+-----------------+       |
-                  |     |                                   |       |
-                  |     v                                   v       |
-                  |  [Regime Detector]             [Signal Generator]|
-                  |  (Gap & Volatility analysis)   (Technical Conflu- |
-                  |  (Market State Classifier)      ence Pipelines)  |
-                  |     |                                   |       |
-                  |     +-----------------+-----------------+       |
-                  |                       |                         |
-                  |                       v                         |
-                  |                [Risk Manager]                   |
-                  |           (Capital Protection Boundary)         |
-                  +-----------------------+-------------------------+
-                                          |
-                                          v
-                  +-------------------------------------------------+
-                  |                PERSISTENCE LAYER                |
-                  |   [SQLite Database]       [State File Cache]    |
-                  |     (WAL Mode Log)          (system_state.json) |
-                  +-----------+-----------------------+-------------+
-                              |                       |
-                              +-----------+-----------+
-                                          |
-                                          v
-                  +-------------------------------------------------+
-                  |               PRESENTATION LAYER                |
-                  |             [Public Viewer UI]                  |
-                  |                 (Port 8502)                     |
-                  |                       ^                         |
-                  |                       |                         |
-                  |             [Nginx Reverse Proxy]               |
-                  |                  (Port 80/443)                  |
-                  +-------------------------------------------------+
+```
+                    ┌──────────────────┐
+                    │   Fyers Servers   │
+                    │  (api-t1.fyers.in)│
+                    └────────┬─────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │ WebSocket    │ REST API      │
+              │ (real-time   │ (candles,     │
+              │  LTP ticks)  │  quotes,      │
+              │              │  orders)      │
+              └──────┬───────┴──────┬───────┘
+                     │              │
+          ┌──────────▼──────────────▼──────────┐
+          │         OCI SERVER                  │
+          │         80.225.195.168              │
+          │                                    │
+          │  ┌──────────────────────────────┐  │
+          │  │  3 Bot Processes (systemd)   │  │
+          │  │  Each: WS + Main Loop + DB   │  │
+          │  └──────────────┬───────────────┘  │
+          │                 │                   │
+          │  ┌──────────────▼───────────────┐  │
+          │  │  Telegram Bot API            │──┼──→ User's Phone
+          │  │  (alerts, token refresh)     │  │
+          │  └──────────────────────────────┘  │
+          │                                    │
+          │  ┌──────────────────────────────┐  │
+          │  │  Nginx (:443) + Let's Encrypt│──┼──→ smtrade.space
+          │  │  → FastAPI → Next.js         │  │    (public web)
+          │  └──────────────────────────────┘  │
+          └────────────────────────────────────┘
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 2. Data Flow
 
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Language** | Python 3.10+ | Core application logic and execution engine |
-| **Data Ingestion** | WebSocket API Client / yfinance | Real-time LTP tick stream ingestion and historical data fetching |
-| **Data Processing** | Pandas, NumPy, pandas-ta | Vectorized technical indicators, resampling, and regime analysis |
-| **Database** | SQLite (WAL Mode) | High-concurrency trade ledger logging and state persistence |
-| **Dashboard** | Streamlit, Plotly | Live admin control panel and read-only interactive analytics dashboard |
-| **Deployment** | Cloud VM (Ubuntu 22.04 LTS) | 24/7 cloud hosting with low-latency network connectivity |
-| **Process Control**| Systemd | Deploys execution loops and dashboards as background service daemons |
-| **Security/Web** | Nginx | Reverse proxy for Streamlit dashboards, SSL, and network isolation |
-| **Notifications** | Telegram Bot API, SMTP | Live crash warnings, system heartbeats, and daily reports |
+### Morning Sequence (09:00 – 09:25)
 
----
+```
+09:00  Bot starts → connects Fyers WebSocket → subscribes to 9 static symbols
+09:15  Market opens → WebSocket begins receiving LTP ticks
+09:16  SCANNER FIRES (once per day):
+       ├── Fyers get_quotes() → batch 50 symbols → LTP + prev_close
+       ├── For qualifying stocks: get_candles(symbol, "D", 15 days)
+       ├── Compute: ATR%, ADX, RSI, EMA alignment, volume ratio, gap%
+       ├── Strategy-specific scorer ranks all stocks
+       ├── Top 8 selected → WATCHLIST updated
+       ├── WebSocket RESTARTED with new symbols
+       └── Telegram: "🔥 [STRATEGY] Watchlist Selected"
+09:16  Regime Detection:
+       ├── Fetch Nifty50 index candles
+       ├── Gap analysis → TRENDING / CHOPPY / NORMAL
+       └── Adjust target R:R based on regime
+09:25  ENTRY WINDOW OPENS — strategy signal generation begins
+```
 
-## 📈 Strategy and Backtesting Interface
+### Intraday Loop (09:25 – 15:25)
 
-The platform provides a modular framework for plugging in quantitative trading strategies and running localized simulation checks:
-- **Signal Confluence**: The system decouples trend filtering, momentum confirmation, and support/resistance levels.
-- **Risk Overlay**: Each entry signal is validated against active risk parameters before execution.
+```
+Every 1 second:
+  ├── Read LTP from WebSocket (thread-safe LTPState)
+  ├── manage_active_trades() → check SL/TP/TSL/BE for open positions
+  └── update_live_index_data()
 
-*(Note: Real-time live execution endpoints and proprietary algorithm models have been abstracted from this public layout to protect IP, but the performance capabilities are validated below.)*
+Every 5 seconds:
+  └── update_dashboard_data() → JSON files for frontend
 
----
+Every 5 minutes:
+  ├── fetch_candles() for each watchlist symbol (10-day 5min history)
+  ├── Inject real-time LTP into latest bar
+  ├── get_combined_signal(df, index_row) → {signal, entry, sl, target}
+  ├── If signal ≠ 0:
+  │     ├── can_trade() → daily limits + loss limit check
+  │     ├── calculate_quantity(entry, sl) → position size
+  │     ├── broker.place_order() → execute (or paper trade)
+  │     ├── log_trade() → SQLite
+  │     ├── copy_trader.copy_entry() → mirror to clients
+  │     └── Telegram alert
+  └── Store ATR in LTP_DICT for TSL computation
 
-## 📊 Backtesting & Out-Of-Sample Performance Results
-
-To demonstrate robustness and prove the working model, the strategies were backtested across historical regimes (2020–2023) and simulated as a paper trade for the out-of-sample (OOS) period (April 9, 2026 – May 28, 2026). The runs compare the raw, unoptimized baseline rules against both the optimized **God Mode v15 Pro** and the **Experimental Bot v8 (Regime-Switching)** models.
-
-These runs utilize the **exact Dhan intraday brokerage fee structures** and a **zero slippage benchmark** (aligned with the server compounding code):
-
-### 🟢 God Mode v15 Pro (Optimized & ML-Filtered)
-| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Crash 2020** | 1 Year (2020) | 363 | 70.0% | 2.34 | **4.1%** | **+196.8%** | 🟢 PASS |
-| **Bull 2021** | 1 Year (2021) | 363 | 61.7% | 1.57 | **7.0%** | **+95.1%** | 🟢 PASS |
-| **Bear 2022** | 1 Year (2022) | 350 | 65.7% | 1.82 | **6.6%** | **+114.4%** | 🟢 PASS |
-| **Sideways 2023** | 1 Year (2023) | 427 | 62.3% | 1.50 | **5.5%** | **+78.8%** | 🟢 PASS |
-| **Paper Trade (OOS)** | 1.5 Mos (2026) | 45 | 66.7% | 2.06 | **4.6%** | **+17.6%** | 🟢 PASS |
-
-### 🟡 Experimental Bot v8 (Regime-Switching & ML-Filtered)
-
-#### 1. Baseline v8 (Original, Unoptimized)
-| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Crash 2020** | 1 Year (2020) | 828 | 45.9% | 1.36 | **11.1%** | **+195.7%** | 🟢 PASS |
-| **Bull 2021** | 1 Year (2021) | 922 | 49.2% | 1.27 | 20.3% | **+153.7%** | ❌ FAIL (High DD) |
-| **Bear 2022** | 1 Year (2022) | 992 | 51.3% | 1.41 | **13.6%** | **+231.9%** | 🟢 PASS |
-| **Sideways 2023** | 1 Year (2023) | 1335 | 52.8% | 1.20 | 30.4% | **+124.4%** | ❌ FAIL (High DD) |
-| **Paper Trade (OOS)** | 1.5 Mos (2026) | 108 | 49.1% | 1.15 | 16.8% | **+10.7%** | ❌ FAIL (High DD) |
-
-#### 2. Optimized v8 (Max Trades = 2 & 0.6% Previous Day Range Filter)
-| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Crash 2020** | 1 Year (2020) | 746 | 47.9% | 1.48 | **12.7%** | **+223.5%** | 🟢 PASS |
-| **Bull 2021** | 1 Year (2021) | 827 | 49.0% | 1.30 | 27.9% | **+154.5%** | ❌ FAIL (High DD) |
-| **Bear 2022** | 1 Year (2022) | 905 | 49.9% | 1.33 | 17.5% | **+177.5%** | ❌ FAIL (High DD) |
-| **Sideways 2023** | 1 Year (2023) | 1136 | 54.8% | 1.23 | 29.8% | **+122.7%** | ❌ FAIL (High DD) |
-| **Paper Trade (OOS)** | 1.5 Mos (2026) | 109 | 47.7% | 1.12 | **9.8%** | **+8.2%** | 🟢 PASS |
-
-### ❌ Baseline Strategy (Raw v15, Unoptimized)
-| Regime | Period | Total Trades | Win Rate | Profit Factor | Max Drawdown | Return | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Crash 2020** | 1 Year (2020) | 546 | 48.0% | 0.70 | 69.3% | -83.3% | ❌ FAIL |
-| **Bull 2021** | 1 Year (2021) | 586 | 41.6% | 0.55 | 94.6% | -93.0% | ❌ FAIL |
-| **Bear 2022** | 1 Year (2022) | 619 | 52.0% | 0.78 | 57.6% | -60.1% | ❌ FAIL |
-| **Sideways 2023** | 1 Year (2023) | 728 | 42.4% | 0.53 | 95.2% | -82.3% | ❌ FAIL |
-| **Paper Trade (OOS)** | 1.5 Mos (2026) | 79 | 51.9% | 0.92 | 8.8% | -3.4% | ❌ FAIL |
-
----
-
-## 💻 Running the Sandbox Locally
-
-You can run the public Streamlit dashboard in a sandbox state populated with mock trades:
-
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/Mat-rixMJ/Smart-Trade.git
-   cd Smart-Trade
-   ```
-
-2. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Configure Settings**:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. **Populate Sandbox Data**:
-   Generate mock trade records to populate the SQLite database:
-   ```bash
-   python dashboard/populate_data.py
-   ```
-
-5. **Launch the Dashboard**:
-   ```bash
-   streamlit run dashboard/public_dashboard.py
-   ```
-   Open `http://localhost:8501/` to explore the presentation UI.
-
----
-
-## ⚙️ Environment Variables
-
-| Variable | Description | Required | Default |
-| :--- | :--- | :--- | :--- |
-| `DHAN_CLIENT_ID` | Client ID for Dhan API integration | No | - |
-| `DHAN_ACCESS_TOKEN` | Personal Access Token for Dhan API | No | - |
-| `FYERS_CLIENT_ID` | App ID / Client ID for Fyers API | Yes (if Fyers) | - |
-| `FYERS_SECRET_KEY` | App Secret Key for Fyers API | Yes (if Fyers) | - |
-| `FYERS_REDIRECT_URI` | Redirect URL registered in Fyers Dashboard | Yes | `http://127.0.0.1:5000/` |
-| `TELEGRAM_BOT_TOKEN` | Token for Telegram notification bot | Yes | - |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID for logs and alerts receiver | Yes | - |
-| `EMAIL_SENDER` | SMTP sender gmail address | Yes | - |
-| `EMAIL_RECEIVER` | Destination email for daily trade reports | Yes | - |
-| `EMAIL_APP_PASSWORD` | App-specific Google password for SMTP auth | Yes | - |
-
----
-
-## 📂 Project Structure
-
-```text
-Smart-Trade-/
-├── .env.example              # Template for API credentials and settings
-├── .gitignore                # Git ignore configuration
-├── requirements.txt          # Python dependencies list
-├── config.py                 # System configuration and settings
-├── main.py                   # Simplified execution engine bootstrap
-├── core/
-│   ├── ws_manager.py         # Asynchronous WebSocket listener for tick streaming
-│   ├── regime_detector.py    # Gap & Volatility morning market regime classifier
-│   ├── risk_manager.py       # Positions sizing, database logging, and risk controls
-│   └── notifier.py           # Alert manager for Telegram updates and daily report emails
-├── strategy/
-│   ├── strategy_template.py  # Abstracted layout strategy model for user implementation
-│   └── exchange.py           # Multi-exchange utility helper
-├── dashboard/
-│   ├── public_dashboard.py   # Streamlit public visual dashboard viewer
-│   └── populate_data.py      # Seed database generator for sandbox simulation
-└── docs/
-    ├── Nginx_setup.conf      # Sample reverse-proxy gateway routing configuration
-    └── systemd_setup.service # Sample systemd service process control configuration
+15:25  SQUARE OFF:
+  ├── Exit all open positions at market
+  ├── daily_summary() → Telegram + Email
+  └── Bot enters standby until next day
 ```
 
 ---
 
-## 🚀 Roadmap
+## 3. Trading Strategies
 
-- [ ] **Sanitized Backtester Sandbox**: Standardize a backtest script utilizing historical csv datasets for local sandbox tests.
-- [ ] **Advanced Indicators Extension**: Incorporate standard Bollinger Band and MACD histogram metrics inside the strategy template.
-- [ ] **React.js Dashboard Version**: Re-architecture the frontend visualizer into a clean modern dashboard template using Next.js.
+### Strategy Comparison
+
+| Attribute | Scalper V1 | Pro V15 | V8 Fixed |
+|-----------|-----------|---------|----------|
+| **Style** | Adaptive Multi-Target | VWAP Pullback | Score-Based Trend |
+| **Entry Types** | Pullback, VWAP Bounce, Breakout | VWAP + Pivot + MACD + EMA15 | Pullback, EMA Cross, VWAP, Breakout |
+| **ADX Gate** | 20 AM / 26 PM | 15 (low bar) | 20 AM / 30 PM |
+| **SL** | 1.3× ATR (tight) | 1.2× ATR (tightest) | 1.8× ATR (wide) |
+| **Target System** | TP1=1R, TP2=2R, Trail 50% | Fixed 2.5R + partial 1R | Stepped: 1.5R → +1R per step |
+| **Max Trades/Day** | 20 | 15 | 12 |
+| **Risk/Trade** | 1.0% | 1.5% | 1.5% |
+| **Ideal Market** | High ATR + volume spikes | Clean VWAP structure | Strong trends + gaps |
+| **Index Filter** | Soft (0.4% deviation block) | Strict (VWAP alignment) | Dynamic (strict if ADX<25) |
+
+### Signal Generation Pipeline
+
+```
+df (5-min OHLCV) + LTP injection
+        │
+        ▼
+┌───────────────────────┐
+│  Indicator Computation│
+│  EMA9/21/50, VWAP,   │
+│  ADX, RSI, ATR,      │
+│  Volume SMA           │
+└───────────┬───────────┘
+            │
+            ▼
+┌───────────────────────┐
+│  Trend Score Engine   │
+│  5 conditions:        │
+│  EMA9>21, EMA21>50,   │
+│  Price>VWAP, DI+>DI-, │
+│  RSI momentum          │
+│  Need 3/5 for trend   │
+└───────────┬───────────┘
+            │
+            ▼
+┌───────────────────────┐
+│  Entry Detection      │
+│  Priority:            │
+│  1. Pullback to EMA   │
+│  2. VWAP Bounce       │
+│  3. Momentum Breakout │
+└───────────┬───────────┘
+            │
+            ▼
+┌───────────────────────┐
+│  Risk Computation     │
+│  SL = ATR × mult     │
+│  TP = Entry ± Risk×RR│
+│  Qty = (Capital×Risk%)│
+│        / Risk/share   │
+└───────────────────────┘
+```
 
 ---
 
-## ⚠️ Disclaimer
+## 4. Stock Selection Engine
 
-This software is for educational purposes only. Trading financial instruments involves high risk, and you may lose more than your initial capital. The author is not a SEBI-registered financial advisor, and this platform does not constitute investment advice. Perform your own due diligence before deploying real capital.
+### Architecture
+
+```
+stock_selector/
+├── base_selector.py        ← ABC: Fyers data fetching + metric computation
+├── selector_registry.py    ← Maps "scalper"/"pro"/"v8" → selector instance
+├── selector_scalper.py     ← ScalperSelector: high ATR, volume spikes
+├── selector_pro.py         ← ProSelector: institutional volume, small gaps
+├── selector_v8.py          ← V8Selector: trending ADX, wide range, momentum
+└── scan_database.py        ← SQLite: daily_scans, stock_daily_ohlc, performance
+```
+
+### Selection Criteria per Strategy
+
+| Metric | Scalper | Pro | V8 |
+|--------|---------|-----|-----|
+| Min ATR% | 0.8% | 0.6% | 1.0% |
+| Max ATR% | 5.0% | 4.0% | 6.0% |
+| Min Volume | 500K | 300K | 200K |
+| Min ADX | 18 | 15 | 18 |
+| Volume Ratio Weight | ×1.5 | ×2.0 (key factor) | ×1.0 |
+| Gap Penalty | None | Yes (>2% blocked) | Bonus (gaps = trend day) |
+| Blacklist | None | None | AXISBANK, INFY, KOTAKBANK, SBIN |
+
+### Data Source Priority
+
+```
+1. Fyers get_quotes() → batch LTP + prev_close (50 symbols/call)
+2. Fyers get_candles(symbol, "D", 15 days) → daily OHLCV for indicators
+3. FALLBACK: yfinance (if Fyers connection fails)
+```
 
 ---
 
-## 👤 Author
+## 5. Trade Lifecycle
 
-**Manoj Kumar**
-- **GitHub**: [Mat-rixMJ](https://github.com/Mat-rixMJ)
-- **LinkedIn**: [Manoj Kumar](https://www.linkedin.com/in/manoj-kumar-algotrader)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    TRADE STATE MACHINE                           │
+│                                                                  │
+│  ┌──────┐    signal    ┌──────┐   BE hit   ┌─────────┐         │
+│  │ SCAN ├────────────→│ OPEN ├───────────→│ BE_MOVED │         │
+│  └──────┘             └──┬───┘            └────┬─────┘         │
+│                          │                      │                │
+│                    SL hit│              PT hit   │  TSL step      │
+│                          ▼                      ▼                │
+│                    ┌──────────┐          ┌──────────┐           │
+│                    │ CLOSED   │          │ PARTIAL  │           │
+│                    │ (Loss)   │          │ (25% out)│           │
+│                    └──────────┘          └────┬─────┘           │
+│                                               │                  │
+│                                     Target hit│  or TSL hit      │
+│                                               ▼                  │
+│                                         ┌──────────┐            │
+│                                         │ CLOSED   │            │
+│                                         │ (Profit) │            │
+│                                         └──────────┘            │
+│                                                                  │
+│  At 15:25 → ALL OPEN → CLOSED (EOD squareoff)                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Exit Mechanisms
+
+| Mechanism | Trigger | Action |
+|-----------|---------|--------|
+| **Hard SL** | LTP ≤ SL (long) or LTP ≥ SL (short) | Close 100%, log loss |
+| **Break-Even** | LTP reaches entry + 0.5R | Move SL to entry + 0.2% (fee cover) |
+| **Partial Target** | LTP reaches 1R profit | Exit 25%, move SL to entry |
+| **Stepped Target** | LTP reaches target | Lock SL at step-0.5R, extend target by +1R |
+| **TSL (ATR-based)** | Price moves favorably | Trail SL by 0.5×ATR per step |
+| **EOD Squareoff** | Time = 15:25 IST | Close all at market price |
+| **Emergency Kill** | `kill_signal.txt` = "KILL" | Close all immediately |
 
 ---
 
-## 📄 License
+## 6. Risk Management
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### Position Sizing Formula
+
+```
+Risk Amount = Capital × Risk% per trade
+            = Rs 10,000 × 1.5% = Rs 150
+
+Quantity = Risk Amount / Risk per Share
+         = Rs 150 / (Entry - SL)
+         = Rs 150 / (₹2500 - ₹2468) = 4 shares
+```
+
+### Daily Safeguards
+
+| Guard | Threshold | Action |
+|-------|-----------|--------|
+| Max trades/day | 12-20 (per strategy) | Block new entries |
+| Max simultaneous | 3-4 | Block new entries |
+| Daily loss limit | -2% of capital | Block all trading |
+| Re-entry cooldown | 5-10 minutes per symbol | Skip symbol |
+| Regime SIT_OUT | Choppy market detected | Stop all scanning |
+| Profit Vault | +15% growth | Auto-bank 10% of capital |
+
+### Database Schema (per bot)
+
+```sql
+trades (
+    id, date, time, symbol, action, quantity,
+    entry, stoploss, target, exit_price, pnl,
+    reason, status, pt_level, be_level,
+    is_partial, is_be, max_price, initial_sl, steps
+)
+```
+
+---
+
+## 7. Infrastructure & Deployment
+
+### Server Specifications
+
+| Component | Specification |
+|-----------|--------------|
+| Instance | Oracle Cloud ARM VM.Standard.A1.Flex |
+| CPU | 4 OCPUs (ARM Ampere A1) |
+| RAM | 24 GB |
+| OS | Ubuntu 22.04 LTS (aarch64) |
+| Storage | 50 GB boot volume |
+| Network | Public IPv4: 80.225.195.168 |
+| Domain | smtrade.space (Cloudflare DNS) |
+| SSL | Let's Encrypt (auto-renew) |
+| Timezone | Asia/Kolkata (IST) |
+
+### Service Architecture
+
+```
+systemd services (9 total):
+├── algodhan_scalper.service  → main_scalper.py    (trading)
+├── algodhan_pro.service      → main_pro.py        (trading)
+├── algodhan_v8.service       → main_v8.py         (trading)
+├── api_server.service        → uvicorn :8000      (API)
+├── frontend.service          → next start :3000   (web UI)
+├── dashboard.service         → streamlit :8503    (control)
+├── public_dashboard.service  → streamlit :8501    (public)
+├── telegram_listener.service → telegram bot       (commands)
+└── watchdog.service          → bot_monitor.py     (health)
+```
+
+### Deployment Commands
+
+```bash
+# From Windows (push code to server):
+python scripts/push_to_server.py --server 80.225.195.168
+
+# On server (deploy 3 bots):
+bash scripts/deploy_3bots.sh
+
+# Monitor:
+journalctl -u algodhan_scalper -f
+journalctl -u algodhan_pro -f
+journalctl -u algodhan_v8 -f
+
+# Emergency stop (all bots):
+sudo systemctl stop algodhan_scalper algodhan_pro algodhan_v8
+
+# Per-bot kill (without service restart):
+echo "KILL" > logs/scalper/kill_signal.txt
+```
+
+### Multi-Bot Isolation
+
+Each bot runs as a separate Linux process with isolated:
+
+| Component | Scalper | Pro | V8 |
+|-----------|---------|-----|-----|
+| Entry point | `main_scalper.py` | `main_pro.py` | `main_v8.py` |
+| Trade DB | `logs/scalper/scalper_trades.db` | `logs/pro/pro_trades.db` | `logs/v8/v8_trades.db` |
+| Log file | `logs/scalper/scalper_bot.log` | `logs/pro/pro_bot.log` | `logs/v8/v8_bot.log` |
+| State file | `logs/scalper/system_state.json` | `logs/pro/system_state.json` | `logs/v8/system_state.json` |
+| Kill signal | `logs/scalper/kill_signal.txt` | `logs/pro/kill_signal.txt` | `logs/v8/kill_signal.txt` |
+| Telegram tag | ⚡ [SCALPER] | 🏛️ [PRO-V15] | 🛡️ [V8-TREND] |
+| Shared | Fyers credentials (.env), LTP WebSocket state, stock_selector.db |
+
+---
+
+## 8. API & Frontend
+
+### API Routes (FastAPI on :8000)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/auth/signup` | POST | User registration |
+| `/api/auth/google-complete` | POST | Google OAuth |
+| `/api/auth/fyers/callback` | GET | Fyers OAuth token exchange |
+| `/api/trading/positions` | GET | Current open positions |
+| `/api/trading/kill` | POST | Emergency stop |
+| `/api/backtest/run` | POST | Run strategy backtest |
+| `/api/public/leaderboard` | GET | Public performance data |
+| `/api/reports/daily` | GET | Daily trade report |
+| `/api/ws` | WebSocket | Real-time dashboard data |
+
+### Frontend (Next.js 14)
+
+| Page | Route | Function |
+|------|-------|----------|
+| Landing | `/` | Public SaaS landing page |
+| Login | `/login` | JWT + Google OAuth |
+| Console | `/secure/console` | Trading dashboard |
+| Analytics | `/secure/analytics` | Performance charts |
+| Backtest | `/secure/backtest` | Strategy backtesting |
+| Risk Desk | `/secure/risk` | Risk monitoring |
+| Admin | `/admin` | User management |
+
+### Nginx Security
+
+- HTTPS only (HTTP → 301 redirect)
+- HSTS headers (1 year)
+- CSP (Content Security Policy)
+- Rate limiting: 30 req/s API, 10 req/s auth
+- Sensitive file blocking (`.env`, `.db`, `.log`, `.py`)
+- Admin panel on VPN-only interface (10.8.0.1:8443)
+
+---
+
+## 9. Configuration Reference
+
+### Environment Variables (.env)
+
+| Variable | Purpose |
+|----------|---------|
+| `FYERS_CLIENT_ID` | Fyers API app ID |
+| `FYERS_ACCESS_TOKEN` | Daily OAuth token (refreshed via Telegram) |
+| `FYERS_SECRET_KEY` | App secret for token generation |
+| `FYERS_TOTP_KEY` | 2FA TOTP secret for headless login |
+| `TELEGRAM_BOT_TOKEN` | Bot token for notifications |
+| `TELEGRAM_CHAT_ID` | Target chat for alerts |
+| `JWT_SECRET` | Authentication signing key |
+| `SMARTTRADE_ENCRYPTION_KEY` | Fernet key for stored tokens |
+
+### Strategy Config (config.py)
+
+```python
+STRATEGY = {
+    "dynamic_watchlist": True,     # Enable per-strategy stock scanner
+    "scalper_mode": False,         # Use scalper selector
+    "pro_mode": True,              # Use strategy_pro.py
+    "risk_per_trade_pct": 1.5,     # % of capital risked per trade
+    "max_trades_per_day": 15,      # Daily trade cap
+    "max_simultaneous_trades": 3,  # Max concurrent positions
+    "sl_atr_multiplier": 1.2,      # Stop loss = ATR × this
+    "final_target_rr": 2.5,        # Target = Risk × this
+    "tsl_atr_based": True,         # ATR-based trailing stop
+    "tsl_atr_factor": 0.5,         # Trail step = 0.5 × ATR
+    "stepped_target_enabled": True, # Extend target on each hit
+}
+```
+
+---
+
+## 10. Operations & Monitoring
+
+### Daily Checklist
+
+| Time | Action | Method |
+|------|--------|--------|
+| Before 09:00 | Refresh Fyers token | Telegram bot (paste redirect URL) |
+| 09:15 | Verify all 3 bots are active | `systemctl is-active algodhan_*` |
+| 09:16 | Check scanner fired | Telegram: "🔥 Watchlist Selected" |
+| During market | Monitor via Telegram | Auto-alerts on signals/trades |
+| 15:30 | Check daily summary | Telegram + Email report |
+| Anytime | Emergency stop | `echo "KILL" > logs/{bot}/kill_signal.txt` |
+
+### Log Locations
+
+```
+/home/ubuntu/algodhan/logs/
+├── scalper/
+│   ├── scalper_bot.log          # Full bot log (rotated daily)
+│   ├── scalper_startup.log      # systemd stdout/stderr
+│   ├── scalper_trades.db        # SQLite trade database
+│   ├── system_state.json        # Dashboard state
+│   └── kill_signal.txt          # Emergency stop trigger
+├── pro/
+│   ├── pro_bot.log
+│   ├── pro_trades.db
+│   └── ...
+├── v8/
+│   ├── v8_bot.log
+│   ├── v8_trades.db
+│   └── ...
+├── stock_selector.db            # Shared scan history
+├── live_watchlist.json          # Current symbols + LTP
+└── api_server.log               # API server logs
+```
+
+### Health Checks
+
+```bash
+# All bots running?
+for s in algodhan_scalper algodhan_pro algodhan_v8; do
+  echo "$s: $(systemctl is-active $s)"
+done
+
+# WebSocket receiving ticks?
+grep "Heartbeat" logs/scalper/scalper_bot.log | tail -1
+
+# Today's trades?
+sqlite3 logs/scalper/scalper_trades.db "SELECT * FROM trades WHERE date=date('now')"
+
+# Scanner selections today?
+sqlite3 logs/stock_selector.db "SELECT strategy, symbol, score FROM daily_scans WHERE scan_date=date('now') ORDER BY strategy, rank"
+```
+
+---
+
+## 11. Security Model
+
+| Layer | Mechanism |
+|-------|-----------|
+| Network | OCI Security Lists (ports 22, 80, 443 only) |
+| Transport | TLS 1.2+ with Let's Encrypt |
+| Authentication | JWT + Google OAuth + Fyers OAuth |
+| Admin Access | VPN-only (OpenVPN, 10.8.0.1:8443) |
+| Token Storage | Fernet encryption (AES-128-CBC) |
+| Secrets | `.env` file (never committed, SCP'd separately) |
+| Rate Limiting | Nginx: 30 req/s API, 10 req/s auth |
+| Headers | HSTS, CSP, X-Frame-Options DENY, nosniff |
+| File Access | Nginx blocks .env, .db, .log, .py, .json |
+| Bot Security | Token expiry detection → auto-pause + alert |
+
+---
+
+## 12. Scaling Considerations
+
+### Current Capacity
+
+| Resource | Usage | Headroom |
+|----------|-------|----------|
+| CPU (4 OCPU) | ~15% (3 bots + API) | Can handle 6-8 bots |
+| RAM (24 GB) | ~4 GB | 20 GB available |
+| WebSocket | 3 connections × ~15 symbols | Fyers allows 100+ |
+| API calls | ~50 quotes + ~50 candles at 09:16 | Well within limits |
+| Storage | ~200 MB (DBs + logs) | 45 GB free |
+
+### Horizontal Scaling Path
+
+```
+Current:  1 server, 3 bots, 50 stocks, paper trading
+    ↓
+Phase 2:  Add Nifty 100 universe, switch to live trading
+    ↓
+Phase 3:  Separate data server (WebSocket aggregator)
+          + N strategy servers (compute-only)
+    ↓
+Phase 4:  Multi-broker support (Fyers + Zerodha + Dhan)
+          Load-balanced API layer
+    ↓
+Phase 5:  Client copy-trading at scale
+          Dedicated DB server (PostgreSQL)
+          Message queue (Redis) between components
+```
+
+### Adding a New Strategy
+
+```python
+# 1. Create backend/strategies/strategy_new.py
+#    Must export: get_combined_signal(df, index_row) → Dict
+
+# 2. Create backend/stock_selector/selector_new.py
+#    Extend BaseSelector, implement _score_stock()
+
+# 3. Register in selector_registry.py
+_SELECTORS["new"] = NewSelector()
+
+# 4. Create backend/main_new.py (copy from main_pro.py template)
+
+# 5. Create algodhan_new.service
+
+# 6. Deploy: bash scripts/deploy_3bots.sh (update to include new bot)
+```
+
+---
+
+## File Structure Reference
+
+```
+Algostrategy_pro/
+├── backend/
+│   ├── main.py                  # Core trading loop (shared by all bots)
+│   ├── main_scalper.py          # Scalper bot entry point
+│   ├── main_pro.py              # Pro bot entry point
+│   ├── main_v8.py               # V8 bot entry point
+│   ├── config.py                # All configuration
+│   ├── broker.py                # Fyers/Dhan abstraction
+│   ├── risk_manager.py          # Position sizing + trade DB
+│   ├── ws_manager.py            # WebSocket + heartbeat
+│   ├── state_manager.py         # Thread-safe LTP + Regime
+│   ├── notifier.py              # Telegram + Email
+│   ├── market_scanner.py        # Nifty100 heat-map scanner
+│   ├── regime_detector.py       # Market regime classification
+│   ├── copy_trader.py           # Client copy-trading
+│   ├── telegram_listener.py     # Telegram command handler
+│   ├── api_server.py            # FastAPI entry point
+│   ├── strategies/
+│   │   ├── strategy_scalper_v1.py
+│   │   ├── strategy_pro.py
+│   │   ├── strategy_v8_fixed.py
+│   │   └── strategy.py (base/legacy)
+│   ├── stock_selector/
+│   │   ├── base_selector.py
+│   │   ├── selector_registry.py
+│   │   ├── selector_scalper.py
+│   │   ├── selector_pro.py
+│   │   ├── selector_v8.py
+│   │   └── scan_database.py
+│   └── api/
+│       ├── routers/ (auth, admin, trading, backtest, public, ws, reports)
+│       ├── database.py, deps.py, models.py, helpers.py
+│       └── ...
+├── frontend/                    # Next.js 14 SaaS console
+├── scripts/
+│   ├── deploy_3bots.sh          # Deploy all strategy bots
+│   ├── deploy_full.sh           # Full stack deployment
+│   └── push_to_server.py        # SCP code to OCI
+├── *.service                    # systemd service files
+├── algodhan_nginx.conf          # Nginx config
+├── .env.example                 # Environment template
+└── README.md                    # This file
+```
+
+---
+
+*Last updated: June 9, 2026 | Version: Multi-Strategy v3.0*
